@@ -2,6 +2,8 @@ require 'rspec'
 require 'rspec/core/rake_task'
 require 'tempfile'
 
+require_relative '../helpers/bat_manifest'
+
 namespace :spec do
   desc 'Run BOSH integration tests against a local sandbox'
   task :integration do
@@ -16,7 +18,7 @@ namespace :spec do
     trap('INT') do
       exit
     end
-    
+
     builds = Dir['*'].select { |f| File.directory?(f) && File.exists?("#{f}/spec") }
     builds -= ['bat']
 
@@ -143,6 +145,8 @@ namespace :spec do
         ENV['BAT_VCAP_PASSWORD'] = 'c1oudc0w'
         ENV['BAT_FAST'] = 'true'
         #ENV['BAT_DEBUG'] = 'verbose'
+        # This should be removed, we should honor this env variable
+        # leaving for now until we stop using the aws bootstrap code for bat
         ENV['BAT_DNS_HOST'] = Resolv.getaddress(director)
         Rake::Task['bat'].invoke
       end
@@ -185,6 +189,19 @@ namespace :spec do
         end
       end
 
+      desc 'Generate a BAT deployment manifest for OpenStack.'
+      task :bat_manifest, :net_type, :director_uuid, :st_version do |_, args|
+        bat_manifest = Bosh::Helpers::BatManifest::OpenstackBatManifest.new
+        bat_manifest.load_env(ENV)
+        bat_manifest.stemcell_version_override = args.st_version
+        pp bat_manifest
+        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..',
+                                                   'templates', 'bat_openstack.yml.erb'))
+        output_path = 'bat.yml'
+        bat_manifest.generate(template_path, output_path, args.net_type, args.director_uuid)
+        puts "wrote #{output_path}"
+      end
+
       task :deploy_micro, [:net_type] do |t, net_type|
         rm_rf('/tmp/openstack-ci/deployments')
         mkdir_p('/tmp/openstack-ci/deployments/microbosh')
@@ -197,10 +214,8 @@ namespace :spec do
           run_bosh 'login admin admin'
 
           run_bosh "upload stemcell #{latest_openstack_stemcell_path}", debug_on_fail: true
-          status = run_bosh 'status'
-          director_uuid = /UUID(\s)+((\w+-)+\w+)/.match(status)[2]
           st_version = stemcell_version(latest_openstack_stemcell_path)
-          generate_openstack_bat_manifest(net_type, director_uuid, st_version)
+          Rake::Task[:bat_manifest].invoke(net_type, target_uuid, st_version)
         end
       end
 
@@ -220,7 +235,6 @@ namespace :spec do
           ENV['BAT_DEPLOYMENT_SPEC'] = '/tmp/openstack-ci/deployments/bat.yml'
           ENV['BAT_VCAP_PASSWORD'] = 'c1oudc0w'
           ENV['BAT_VCAP_PRIVATE_KEY'] = ENV['BOSH_OPENSTACK_PRIVATE_KEY']
-          ENV['BAT_DNS_HOST'] = ENV['BOSH_OPENSTACK_VIP_DIRECTOR_IP']
           ENV['BAT_FAST'] = 'true'
           Rake::Task['bat'].execute
         end
@@ -234,7 +248,7 @@ namespace :spec do
           Rake::Task['spec:system:vsphere:deploy_micro'].invoke
           Rake::Task['spec:system:vsphere:bat'].invoke
         ensure
-          Rake::Task['spec:system:vsphere:teardown_microbosh'].invoke
+          Rake::Task['spec:system:teardown_bosh'].invoke('', bosh_deployments_path)
         end
       end
 
@@ -242,57 +256,60 @@ namespace :spec do
         begin
           Rake::Task['spec:system:vsphere:deploy_micro'].invoke
           Rake::Task['spec:system:vsphere:deploy_full_bosh'].invoke
-          #Rake::Task['spec:system:vsphere:bat'].invoke
+          Rake::Task['spec:system:vsphere:bat'].invoke
         ensure
-          #Rake::Task['spec:system:vsphere:teardown_full_bosh'].invoke
-          #Rake::Task['spec:system:vsphere:teardown_microbosh'].invoke
+          Rake::Task['spec:system:teardown_bosh'].invoke(ENV['MICROBOSH_IP'], bosh_deployments_path)
         end
       end
 
+      desc 'Generate a BAT deployment manifest for vSphere.'
+      task :bat_manifest, :director_uuid, :st_version do |_, args|
+        bat_manifest = Bosh::Helpers::BatManifest::VsphereBatManifest.new
+        bat_manifest.load_env(ENV)
+        bat_manifest.stemcell_version_override = args.st_version
+        pp bat_manifest
+        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..',
+                                                   'templates', 'bat_vsphere.yml.erb'))
+        output_path = 'bat.yml'
+        bat_manifest.generate(template_path, output_path, args.director_uuid)
+        puts "wrote #{output_path}"
+      end
+
       task :deploy_micro do
-        rm_rf('/tmp/vsphere-ci/deployments')
-        mkdir_p('/tmp/vsphere-ci/deployments/microbosh')
-        cd('/tmp/vsphere-ci/deployments') do
+        cd(bosh_deployments_path) do
+          mkdir_p('microbosh')
           cd('microbosh') do
             generate_vsphere_micro_bosh
           end
           run_bosh 'micro deployment microbosh'
           run_bosh "micro deploy #{latest_vsphere_micro_bosh_stemcell_path}"
           run_bosh 'login admin admin'
-
-          run_bosh "upload stemcell #{latest_vsphere_stemcell_path}", debug_on_fail: true
-          status = run_bosh 'status'
-          director_uuid = /UUID(\s)+((\w+-)+\w+)/.match(status)[2]
-          st_version = stemcell_version(latest_vsphere_stemcell_path)
-          generate_vsphere_bat_manifest(director_uuid, st_version)
         end
       end
 
       task :deploy_full_bosh do
-        status = run_bosh 'status'
-        director_uuid = /UUID(\s)+((\w+-)+\w+)/.match(status)[2]
-        generate_vsphere_full_bosh_stub(director_uuid)
-        #run_bosh 'bosh deployment bosh.yml'
-        #run_bosh 'bosh diff full_bosh_diff_template_vsphere.yml.erb'
-      end
-
-      task :teardown_microbosh do
-        cd('/tmp/vsphere-ci/deployments') do
-          run_bosh 'delete deployment bat', :ignore_failures => true
-          run_bosh "delete stemcell bosh-stemcell #{stemcell_version(latest_vsphere_stemcell_path)}", :ignore_failures => true
-          run_bosh 'micro delete', :ignore_failures => true
+        cd(bosh_deployments_path) do
+          generate_vsphere_full_bosh_stub(target_uuid)
         end
-        rm_rf('/tmp/vsphere-ci/deployments')
+        run_bosh "deployment #{bosh_deployments_path}/bosh.yml"
+        run_bosh 'diff rake/templates/full_bosh_diff_template_vsphere.yml.erb'
+        run_bosh "upload release http://s3.amazonaws.com/bosh-ci-pipeline/release/bosh-#{Bosh::Helpers::Build.candidate.number}.tgz"
+        run_bosh "upload stemcell http://s3.amazonaws.com/bosh-ci-pipeline/bosh-stemcell/vsphere/bosh-stemcell-vsphere-#{Bosh::Helpers::Build.candidate.number}.tgz"
+        run_bosh 'deploy'
+        run_bosh "target #{ENV['BOSH_IP']}"
+        run_bosh 'login admin admin'
       end
 
       task :bat do
         cd(ENV['WORKSPACE']) do
           ENV['BAT_DIRECTOR'] = ENV['BOSH_VSPHERE_MICROBOSH_IP']
           ENV['BAT_STEMCELL'] = latest_vsphere_stemcell_path
-          ENV['BAT_DEPLOYMENT_SPEC'] = '/tmp/vsphere-ci/deployments/bat.yml'
+          ENV['BAT_DEPLOYMENT_SPEC'] = "#{bosh_deployments_path}/bat.yml"
           ENV['BAT_VCAP_PASSWORD'] = 'c1oudc0w'
-          ENV['BAT_DNS_HOST'] = ENV['BOSH_VSPHERE_MICROBOSH_IP']
           ENV['BAT_FAST'] = 'true'
+          st_version = stemcell_version(latest_vsphere_stemcell_path)
+          Rake::Task[:bat_manifest].invoke(target_uuid, st_version)
+          run_bosh "upload stemcell #{latest_vsphere_stemcell_path}", debug_on_fail: true
           Rake::Task['bat'].execute
         end
       end
@@ -359,21 +376,6 @@ namespace :spec do
       end
     end
 
-    def generate_openstack_bat_manifest(net_type, director_uuid, st_version)
-      vip = ENV['BOSH_OPENSTACK_VIP_BAT_IP']
-      net_id = ENV['BOSH_OPENSTACK_NET_ID']
-      stemcell_version = st_version
-      net_cidr = ENV['BOSH_OPENSTACK_NETWORK_CIDR']
-      net_reserved = ENV['BOSH_OPENSTACK_NETWORK_RESERVED']
-      net_static = ENV['BOSH_OPENSTACK_NETWORK_STATIC']
-      net_gateway = ENV['BOSH_OPENSTACK_NETWORK_GATEWAY']
-      template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..', '..', 'templates', 'bat_openstack.yml.erb'))
-      bat_manifest = ERB.new(File.read(template_path)).result(binding)
-      File.open('bat.yml', 'w+') do |f|
-        f.write(bat_manifest)
-      end
-    end
-
     def generate_vsphere_micro_bosh
       ip = ENV['BOSH_VSPHERE_MICROBOSH_IP']
       netmask = ENV['BOSH_VSPHERE_NETMASK']
@@ -426,28 +428,31 @@ namespace :spec do
       end
     end
 
-    def generate_vsphere_bat_manifest(director_uuid, st_version)
-      ip = ENV['BOSH_VSPHERE_BAT_IP']
-      net_id = ENV['BOSH_VSPHERE_NET_ID']
-      stemcell_version = st_version
-      net_cidr = ENV['BOSH_VSPHERE_NETWORK_CIDR']
-      net_reserved_admin = ENV['BOSH_VSPHERE_NETWORK_RESERVED_ADMIN']
-      net_reserved = ENV['BOSH_VSPHERE_NETWORK_RESERVED'].split(/[|,]/).map(&:strip)
-      net_static_bat = ENV['BOSH_VSPHERE_NETWORK_STATIC_BAT']
-      net_static_bosh = ENV['BOSH_VSPHERE_NETWORK_STATIC_BOSH']
-      gateway = ENV['BOSH_VSPHERE_GATEWAY']
-      template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..', 'templates', 'bat_vsphere.yml.erb'))
-      bat_manifest = ERB.new(File.read(template_path)).result(binding)
-      File.open('bat.yml', 'w+') do |f|
-        f.write(bat_manifest)
+    def bosh_config_path
+      # allow override of config file, useful for running standalone rake tasks
+      if ENV['RAKE_BOSH_CONFIG']
+        ENV['RAKE_BOSH_CONFIG']
+      else
+        # We should keep a reference to the tempfile, otherwise,
+        # when the object gets GC'd, the tempfile is deleted.
+        @bosh_config_tempfile ||= Tempfile.new('bosh_config')
+        @bosh_config_tempfile.path
       end
     end
 
-    def bosh_config_path
-      # We should keep a reference to the tempfile, otherwise,
-      # when the object gets GC'd, the tempfile is deleted.
-      @bosh_config_tempfile ||= Tempfile.new('bosh_config')
-      @bosh_config_tempfile.path
+    def bosh_deployments_path
+      unless @bosh_deployments_path
+        if ENV['RAKE_BOSH_DEPLOYMENTS']
+          @bosh_deployments_path = ENV['RAKE_BOSH_DEPLOYMENTS']
+        else
+          @bosh_deployments_path = Dir.mktmpdir('ci-')
+        end
+        if File.basename(@bosh_deployments_path) != 'deployments'
+          @bosh_deployments_path = File.join(@bosh_deployments_path, 'deployments')
+        end
+        mkdir_p(@bosh_deployments_path)
+      end
+      @bosh_deployments_path
     end
 
     def run(cmd, options = {})
@@ -492,6 +497,36 @@ namespace :spec do
         @run_bosh_failures = 0
       end
       raise
+    end
+
+    def target_uuid
+      status = run_bosh 'status'
+      /UUID(\s)+((\w+-)+\w+)/.match(status)[2]
+    end
+
+    task :teardown_bosh, [:micro_ip, :micro_path] do |_, args|
+      if args.micro_ip.to_s.empty? && args.micro_path.to_s.empty?
+        fail 'Pass in the microbosh IP or microbosh deployment path'
+      end
+
+      # try to clean up after a broken bat
+      run_bosh 'delete deployment bat', force: true, ignore_failures: true
+
+      # cleaning up a full bosh
+      unless args.micro_ip.to_s.empty?
+        run_bosh "delete stemcell bosh-stemcell #{Bosh::Helpers::Build.candidate.number}", ignore_failures: true
+        run_bosh "target #{args.micro_ip}"
+        run_bosh 'delete deployment full-bosh-jenkins', force: true, ignore_failures: true
+      end
+
+      # cleaning up a microbosh
+      unless args.micro_path.to_s.empty?
+        run_bosh "delete stemcell bosh-stemcell #{Bosh::Helpers::Build.candidate.number}", ignore_failures: true
+        cd(args.micro_path) do
+          run_bosh 'micro delete'
+        end
+        rm_rf(File.dirname(args.micro_path))
+      end
     end
 
   end
