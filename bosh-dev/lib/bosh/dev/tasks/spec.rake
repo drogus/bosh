@@ -246,7 +246,7 @@ namespace :spec do
       task :micro do
         begin
           Rake::Task['spec:system:vsphere:deploy_micro'].invoke
-          Rake::Task['spec:system:vsphere:bat'].invoke
+          Rake::Task['spec:system:vsphere:bat'].invoke(ENV['BOSH_MICROBOSH_IP'])
         ensure
           Rake::Task['spec:system:teardown_bosh'].invoke('', bosh_deployments_path)
         end
@@ -256,23 +256,10 @@ namespace :spec do
         begin
           Rake::Task['spec:system:vsphere:deploy_micro'].invoke
           Rake::Task['spec:system:vsphere:deploy_full_bosh'].invoke
-          Rake::Task['spec:system:vsphere:bat'].invoke
+          Rake::Task['spec:system:vsphere:bat'].invoke(ENV['BOSH_IP'])
         ensure
-          Rake::Task['spec:system:teardown_bosh'].invoke(ENV['MICROBOSH_IP'], bosh_deployments_path)
+          Rake::Task['spec:system:teardown_bosh'].invoke(ENV['BOSH_MICROBOSH_IP'], bosh_deployments_path)
         end
-      end
-
-      desc 'Generate a BAT deployment manifest for vSphere.'
-      task :bat_manifest, :director_uuid, :st_version do |_, args|
-        bat_manifest = Bosh::Helpers::BatManifest::VsphereBatManifest.new
-        bat_manifest.load_env(ENV)
-        bat_manifest.stemcell_version_override = args.st_version
-        pp bat_manifest
-        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..',
-                                                   'templates', 'bat_vsphere.yml.erb'))
-        output_path = 'bat.yml'
-        bat_manifest.generate(template_path, output_path, args.director_uuid)
-        puts "wrote #{output_path}"
       end
 
       task :deploy_micro do
@@ -282,7 +269,9 @@ namespace :spec do
             generate_vsphere_micro_bosh
           end
           run_bosh 'micro deployment microbosh'
-          run_bosh "micro deploy #{latest_vsphere_micro_bosh_stemcell_path}"
+          micro_bosh_stemcell_file = "micro-bosh-stemcell-vsphere-#{Bosh::Helpers::Build.candidate.number}.tgz"
+          run "wget http://s3.amazonaws.com/bosh-ci-pipeline/micro-bosh-stemcell/vsphere/#{micro_bosh_stemcell_file}"
+          run_bosh "micro deploy #{micro_bosh_stemcell_file}"
           run_bosh 'login admin admin'
         end
       end
@@ -300,16 +289,28 @@ namespace :spec do
         run_bosh 'login admin admin'
       end
 
-      task :bat do
+      desc 'Generate a BAT deployment manifest for vSphere.'
+      task :bat_manifest, :director_uuid, :st_version do |_, args|
+        bat_manifest = Bosh::Helpers::BatManifest::VsphereBatManifest.new
+        bat_manifest.load_env(ENV)
+        bat_manifest.stemcell_version_override = args.st_version
+        pp bat_manifest
+        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..',
+                                                   'templates', 'bat_vsphere.yml.erb'))
+        output_path = File.join(bosh_deployments_path, 'bat.yml')
+        bat_manifest.generate(template_path, output_path, args.director_uuid)
+        puts "wrote #{output_path}"
+      end
+
+      task :bat, :target do |_, args|
         cd(ENV['WORKSPACE']) do
-          ENV['BAT_DIRECTOR'] = ENV['BOSH_VSPHERE_MICROBOSH_IP']
-          ENV['BAT_STEMCELL'] = latest_vsphere_stemcell_path
-          ENV['BAT_DEPLOYMENT_SPEC'] = "#{bosh_deployments_path}/bat.yml"
+          ENV['BAT_DIRECTOR'] = args.target
+          ENV['BAT_DNS_HOST'] = ENV['BOSH_BAT_DNS_HOST']
+          ENV['BAT_STEMCELL'] = "http://s3.amazonaws.com/bosh-ci-pipeline/bosh-stemcell/vsphere/bosh-stemcell-vsphere-#{Bosh::Helpers::Build.candidate.number}.tgz"
+          ENV['BAT_DEPLOYMENT_SPEC'] = File.join(bosh_deployments_path, 'bat.yml')
           ENV['BAT_VCAP_PASSWORD'] = 'c1oudc0w'
           ENV['BAT_FAST'] = 'true'
-          st_version = stemcell_version(latest_vsphere_stemcell_path)
-          Rake::Task[:bat_manifest].invoke(target_uuid, st_version)
-          run_bosh "upload stemcell #{latest_vsphere_stemcell_path}", debug_on_fail: true
+          Rake::Task['spec:system:vsphere:bat_manifest'].invoke(target_uuid, "#{Bosh::Helpers::Build.candidate.number}")
           Rake::Task['bat'].execute
         end
       end
@@ -377,7 +378,7 @@ namespace :spec do
     end
 
     def generate_vsphere_micro_bosh
-      ip = ENV['BOSH_VSPHERE_MICROBOSH_IP']
+      ip = ENV['BOSH_MICROBOSH_IP']
       netmask = ENV['BOSH_VSPHERE_NETMASK']
       gateway = ENV['BOSH_VSPHERE_GATEWAY']
       dns = ENV['BOSH_VSPHERE_DNS']
@@ -401,7 +402,7 @@ namespace :spec do
     end
 
     def generate_vsphere_full_bosh_stub(director_uuid)
-      microbosh_ip = ENV['BOSH_VSPHERE_MICROBOSH_IP']
+      microbosh_ip = ENV['BOSH_MICROBOSH_IP']
       gateway = ENV['BOSH_VSPHERE_GATEWAY']
       net_cidr = ENV['BOSH_VSPHERE_NETWORK_CIDR']
       net_reserved_admin = ENV['BOSH_VSPHERE_NETWORK_RESERVED_ADMIN']
@@ -523,6 +524,7 @@ namespace :spec do
       unless args.micro_path.to_s.empty?
         run_bosh "delete stemcell bosh-stemcell #{Bosh::Helpers::Build.candidate.number}", ignore_failures: true
         cd(args.micro_path) do
+          run_bosh 'micro deployment microbosh'
           run_bosh 'micro delete'
         end
         rm_rf(File.dirname(args.micro_path))
