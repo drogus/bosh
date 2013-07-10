@@ -2,7 +2,7 @@ require 'rspec'
 require 'rspec/core/rake_task'
 require 'tempfile'
 
-require_relative '../helpers/bat_manifest'
+require 'bosh/dev/helpers/bat_manifest'
 
 namespace :spec do
   desc 'Run BOSH integration tests against a local sandbox'
