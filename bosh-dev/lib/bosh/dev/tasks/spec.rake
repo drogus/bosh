@@ -194,8 +194,8 @@ namespace :spec do
         bat_manifest = Bosh::BatManifests::Openstack.new(ENV)
         bat_manifest.stemcell_version_override = args.st_version
         pp bat_manifest
-        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..', '..',
-                                                   'templates', 'bat_openstack.yml.erb'))
+        template_path =
+            File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..', '..', 'templates', 'bat_openstack.yml.erb'))
         output_path = 'bat.yml'
         bat_manifest.generate(template_path, output_path, args.net_type, args.director_uuid)
         puts "wrote #{output_path}"
@@ -294,8 +294,8 @@ namespace :spec do
 
         bat_manifest.stemcell_version_override = args.st_version
         pp bat_manifest
-        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..',
-                                                   'templates', 'bat_vsphere.yml.erb'))
+        template_path =
+            File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..', '..', 'templates', 'bat_vsphere.yml.erb'))
         output_path = File.join(bosh_deployments_path, 'bat.yml')
         bat_manifest.generate(template_path, output_path, args.director_uuid)
         puts "wrote #{output_path}"
@@ -421,7 +421,7 @@ namespace :spec do
       vcenter_ubosh_folder_prefix = ENV['BOSH_VSPHERE_VCENTER_UBOSH_FOLDER_PREFIX']
       vcenter_datastore_pattern = ENV['BOSH_VSPHERE_VCENTER_DATASTORE_PATTERN']
       vcenter_ubosh_datastore_pattern = ENV['BOSH_VSPHERE_VCENTER_UBOSH_DATASTORE_PATTERN']
-      template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..', 'templates', 'full_bosh_vsphere.yml.erb'))
+      template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..', '..', 'templates', 'full_bosh_vsphere.yml.erb'))
       bosh_manifest = ERB.new(File.read(template_path)).result(binding)
       File.open("bosh.yml", "w+") do |f|
         f.write(bosh_manifest)
