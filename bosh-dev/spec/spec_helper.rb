@@ -1,6 +1,5 @@
 require "rspec"
 require "rake"
-require 'tempfile'
 
 shared_context "rake" do
   let(:rake) { Rake::Application.new }
