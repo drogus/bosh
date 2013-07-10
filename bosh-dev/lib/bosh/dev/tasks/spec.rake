@@ -2,7 +2,7 @@ require 'rspec'
 require 'rspec/core/rake_task'
 require 'tempfile'
 
-require 'bosh/dev/helpers/bat_manifest'
+require 'bosh/dev/bat_manifests'
 
 namespace :spec do
   desc 'Run BOSH integration tests against a local sandbox'
@@ -191,11 +191,10 @@ namespace :spec do
 
       desc 'Generate a BAT deployment manifest for OpenStack.'
       task :bat_manifest, :net_type, :director_uuid, :st_version do |_, args|
-        bat_manifest = Bosh::Helpers::BatManifest::OpenstackBatManifest.new
-        bat_manifest.load_env(ENV)
+        bat_manifest = Bosh::BatManifests::Openstack.new(ENV)
         bat_manifest.stemcell_version_override = args.st_version
         pp bat_manifest
-        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..',
+        template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..', '..',
                                                    'templates', 'bat_openstack.yml.erb'))
         output_path = 'bat.yml'
         bat_manifest.generate(template_path, output_path, args.net_type, args.director_uuid)
@@ -291,8 +290,8 @@ namespace :spec do
 
       desc 'Generate a BAT deployment manifest for vSphere.'
       task :bat_manifest, :director_uuid, :st_version do |_, args|
-        bat_manifest = Bosh::Helpers::BatManifest::VsphereBatManifest.new
-        bat_manifest.load_env(ENV)
+        bat_manifest = Bosh::BatManifests::Vsphere.new(ENV)
+
         bat_manifest.stemcell_version_override = args.st_version
         pp bat_manifest
         template_path = File.expand_path(File.join(File.dirname(__FILE__), '..', '..',

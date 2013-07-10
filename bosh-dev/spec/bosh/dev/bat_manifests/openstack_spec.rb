@@ -1,8 +1,9 @@
 require 'spec_helper'
-require_relative '../../../lib/helpers/bat_manifest/openstack_bat_manifest'
+require 'bosh/dev/bat_manifests/openstack'
+require 'tempfile'
+require 'yaml'
 
-describe Bosh::Helpers::BatManifest::OpenstackBatManifest do
-
+describe Bosh::Dev::BatManifests::Openstack do
   let(:env) {
     {
         'BOSH_OPENSTACK_VIP_BAT_IP' => '192.168.0.4',
@@ -14,19 +15,14 @@ describe Bosh::Helpers::BatManifest::OpenstackBatManifest do
     }
   }
 
-  describe '#load_env' do
+  subject { Bosh::Dev::BatManifests::Openstack.new(env) }
 
-    before do
-      subject.load_env env
-    end
-
-    its(:vip) { should eq '192.168.0.4' }
-    its(:net_id) { should eq 'net_id' }
-    its(:net_cidr) { should eq '192.168.0.0/24' }
-    its(:net_reserved) { should eq ['192.168.0.6 - 192.168.0.10', '192.168.0.20 - 192.168.0.29'] }
-    its(:net_static) { should eq '192.168.0.4' }
-    its(:net_gateway) { should eq '192.168.0.1' }
-  end
+  its(:vip) { should eq '192.168.0.4' }
+  its(:net_id) { should eq 'net_id' }
+  its(:net_cidr) { should eq '192.168.0.0/24' }
+  its(:net_reserved) { should eq ['192.168.0.6 - 192.168.0.10', '192.168.0.20 - 192.168.0.29'] }
+  its(:net_static) { should eq '192.168.0.4' }
+  its(:net_gateway) { should eq '192.168.0.1' }
 
   describe '#generate' do
 
@@ -34,15 +30,11 @@ describe Bosh::Helpers::BatManifest::OpenstackBatManifest do
     let(:net_type) { 'manual' }
 
     it 'writes the yaml' do
-      manifest = described_class.new
-      manifest.load_env(env)
-
-      template_path = File.expand_path(
-          File.join(File.dirname(__FILE__), '..', '..', '..', 'templates',
-                    'bat_openstack.yml.erb'))
+      template_path =
+          File.expand_path(File.join(File.dirname(__FILE__), '..', '..', '..', '..', 'templates', 'bat_openstack.yml.erb'))
 
       Tempfile.open('bat_output') do |output|
-        manifest.generate(template_path, output.path, net_type, director_uuid)
+        subject.generate(template_path, output.path, net_type, director_uuid)
         expect(YAML.load_file(output.path)).to eq({'cpi' => 'openstack',
                                                    'properties' =>
                                                        {'static_ip' => '192.168.0.4',
@@ -55,13 +47,12 @@ describe Bosh::Helpers::BatManifest::OpenstackBatManifest do
                                                         'network' =>
                                                             {'cidr' => '192.168.0.0/24',
                                                              'reserved' =>
-                                                                 [['192.168.0.6 - 192.168.0.10', "192.168.0.20 - 192.168.0.29"]],
+                                                                 [['192.168.0.6 - 192.168.0.10', '192.168.0.20 - 192.168.0.29']],
                                                              'static' => %w(192.168.0.4),
                                                              'gateway' => '192.168.0.1',
                                                              'security_groups' => %w(default),
                                                              'net_id' => 'net_id'}}})
       end
     end
-
   end
 end
