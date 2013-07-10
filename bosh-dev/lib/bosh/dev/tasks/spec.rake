@@ -280,7 +280,7 @@ namespace :spec do
           generate_vsphere_full_bosh_stub(target_uuid)
         end
         run_bosh "deployment #{bosh_deployments_path}/bosh.yml"
-        run_bosh 'diff rake/templates/full_bosh_diff_template_vsphere.yml.erb'
+        run_bosh 'diff bosh-dev/templates/full_bosh_diff_template_vsphere.yml.erb'
         run_bosh "upload release http://s3.amazonaws.com/bosh-ci-pipeline/release/bosh-#{Bosh::Dev::Build.candidate.number}.tgz"
         run_bosh "upload stemcell http://s3.amazonaws.com/bosh-ci-pipeline/bosh-stemcell/vsphere/bosh-stemcell-vsphere-#{Bosh::Dev::Build.candidate.number}.tgz"
         run_bosh 'deploy'
