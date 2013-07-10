@@ -268,7 +268,7 @@ namespace :spec do
             generate_vsphere_micro_bosh
           end
           run_bosh 'micro deployment microbosh'
-          micro_bosh_stemcell_file = "micro-bosh-stemcell-vsphere-#{Bosh::Helpers::Build.candidate.number}.tgz"
+          micro_bosh_stemcell_file = "micro-bosh-stemcell-vsphere-#{Bosh::Dev::Build.candidate.number}.tgz"
           run "wget http://s3.amazonaws.com/bosh-ci-pipeline/micro-bosh-stemcell/vsphere/#{micro_bosh_stemcell_file}"
           run_bosh "micro deploy #{micro_bosh_stemcell_file}"
           run_bosh 'login admin admin'
@@ -281,8 +281,8 @@ namespace :spec do
         end
         run_bosh "deployment #{bosh_deployments_path}/bosh.yml"
         run_bosh 'diff rake/templates/full_bosh_diff_template_vsphere.yml.erb'
-        run_bosh "upload release http://s3.amazonaws.com/bosh-ci-pipeline/release/bosh-#{Bosh::Helpers::Build.candidate.number}.tgz"
-        run_bosh "upload stemcell http://s3.amazonaws.com/bosh-ci-pipeline/bosh-stemcell/vsphere/bosh-stemcell-vsphere-#{Bosh::Helpers::Build.candidate.number}.tgz"
+        run_bosh "upload release http://s3.amazonaws.com/bosh-ci-pipeline/release/bosh-#{Bosh::Dev::Build.candidate.number}.tgz"
+        run_bosh "upload stemcell http://s3.amazonaws.com/bosh-ci-pipeline/bosh-stemcell/vsphere/bosh-stemcell-vsphere-#{Bosh::Dev::Build.candidate.number}.tgz"
         run_bosh 'deploy'
         run_bosh "target #{ENV['BOSH_IP']}"
         run_bosh 'login admin admin'
@@ -305,11 +305,11 @@ namespace :spec do
         cd(ENV['WORKSPACE']) do
           ENV['BAT_DIRECTOR'] = args.target
           ENV['BAT_DNS_HOST'] = ENV['BOSH_BAT_DNS_HOST']
-          ENV['BAT_STEMCELL'] = "http://s3.amazonaws.com/bosh-ci-pipeline/bosh-stemcell/vsphere/bosh-stemcell-vsphere-#{Bosh::Helpers::Build.candidate.number}.tgz"
+          ENV['BAT_STEMCELL'] = "http://s3.amazonaws.com/bosh-ci-pipeline/bosh-stemcell/vsphere/bosh-stemcell-vsphere-#{Bosh::Dev::Build.candidate.number}.tgz"
           ENV['BAT_DEPLOYMENT_SPEC'] = File.join(bosh_deployments_path, 'bat.yml')
           ENV['BAT_VCAP_PASSWORD'] = 'c1oudc0w'
           ENV['BAT_FAST'] = 'true'
-          Rake::Task['spec:system:vsphere:bat_manifest'].invoke(target_uuid, "#{Bosh::Helpers::Build.candidate.number}")
+          Rake::Task['spec:system:vsphere:bat_manifest'].invoke(target_uuid, "#{Bosh::Dev::Build.candidate.number}")
           Rake::Task['bat'].execute
         end
       end
@@ -514,14 +514,14 @@ namespace :spec do
 
       # cleaning up a full bosh
       unless args.micro_ip.to_s.empty?
-        run_bosh "delete stemcell bosh-stemcell #{Bosh::Helpers::Build.candidate.number}", ignore_failures: true
+        run_bosh "delete stemcell bosh-stemcell #{Bosh::Dev::Build.candidate.number}", ignore_failures: true
         run_bosh "target #{args.micro_ip}"
         run_bosh 'delete deployment full-bosh-jenkins', force: true, ignore_failures: true
       end
 
       # cleaning up a microbosh
       unless args.micro_path.to_s.empty?
-        run_bosh "delete stemcell bosh-stemcell #{Bosh::Helpers::Build.candidate.number}", ignore_failures: true
+        run_bosh "delete stemcell bosh-stemcell #{Bosh::Dev::Build.candidate.number}", ignore_failures: true
         cd(args.micro_path) do
           run_bosh 'micro deployment microbosh'
           run_bosh 'micro delete'
