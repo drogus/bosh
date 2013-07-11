@@ -26,9 +26,14 @@ class Deployment
 
   def generate_deployment_manifest(spec)
     @context = Bosh::Common::TemplateEvaluationContext.new(spec)
-    erb = ERB.new(load_template(@context.spec.cpi))
-    result = erb.result(@context.get_binding)
-    puts result if debug?
+    result = ERB.new(load_template(@context.spec.cpi)).result(@context.get_binding)
+
+    if debug?
+      puts "# Deployment manifest generated from: #{template_file(@context.spec.cpi)}"
+      puts result
+      puts '#/Deployment manifest'
+    end
+
     @yaml = Psych::load(result)
     store_manifest(result)
   end
@@ -41,8 +46,7 @@ class Deployment
   end
 
   def load_template(cpi)
-    template = File.expand_path("../../templates/#{cpi}.yml.erb", __FILE__)
-    File.read(template)
+    File.read(template_file(cpi))
   end
 
   def tempfile(name)
@@ -50,6 +54,11 @@ class Deployment
   end
 
   private
+
+  def template_file(cpi)
+    File.expand_path("../../templates/#{cpi}.yml.erb", __FILE__)
+  end
+
   def debug?
     ENV['BAT_DEBUG'] == "verbose"
   end
