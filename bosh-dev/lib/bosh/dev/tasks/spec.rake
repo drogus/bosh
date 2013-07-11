@@ -191,7 +191,7 @@ namespace :spec do
 
       desc 'Generate a BAT deployment manifest for OpenStack.'
       task :bat_manifest, :net_type, :director_uuid, :st_version do |_, args|
-        bat_manifest = Bosh::BatManifests::Openstack.new(ENV)
+        bat_manifest = Bosh::Dev::BatManifests::Openstack.new(ENV)
         bat_manifest.stemcell_version_override = args.st_version
         pp bat_manifest
         template_path =
@@ -290,7 +290,7 @@ namespace :spec do
 
       desc 'Generate a BAT deployment manifest for vSphere.'
       task :bat_manifest, :director_uuid, :st_version do |_, args|
-        bat_manifest = Bosh::BatManifests::Vsphere.new(ENV)
+        bat_manifest = Bosh::Dev::BatManifests::Vsphere.new(ENV)
 
         bat_manifest.stemcell_version_override = args.st_version
         pp bat_manifest
