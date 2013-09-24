@@ -72,7 +72,6 @@ module Bosh::Dev::Bat
       env['BAT_DNS_HOST']        = director_address.ip
       env['BAT_STEMCELL']        = bat_helper.bosh_stemcell_path
       env['BAT_VCAP_PASSWORD']   = 'c1oudc0w'
-      env['BAT_FAST']            = 'true'
     end
 
     def teardown_micro
